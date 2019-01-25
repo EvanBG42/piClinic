@@ -49,8 +49,7 @@
 require_once 'api_common.php';
 exitIfCalledFromBrowser(__FILE__);
 /*
- *  Checks the username and password and, if they are valid,
- *    creates a new user session.
+ *  add a new text message request to the message queue
  */
 function _textmsg_post ($dbLink, $apiUserToken, $requestArgs) {
     /*
@@ -91,15 +90,15 @@ function _textmsg_post ($dbLink, $apiUserToken, $requestArgs) {
 			$returnValue['debug'] = $dbInfo;
 		}
 		$returnValue['httpResponse'] = 400;
-		$returnValue['httpReason']	= "Unable to create new session. Required field(s): ". $missingColumnList. " are missing.";
+		$returnValue['httpReason']	= "Unable to create new textmsg. Required field(s): ". $missingColumnList. " are missing.";
         $logData['logStatusCode'] = $returnValue['httpResponse'];
         $logData['logStatusMessage'] = $returnValue['httpReason'];
         writeEntryToLog ($dbLink, $logData);
+        profileLogClose($profileData, __FILE__, $requestArgs, PROFILE_ERROR_PARAMS);
 		return $returnValue;
 	}
 
-    $logData['logQueryString'] = $requestArgs;
-    $dbInfo = array();
+    $logData['requestArgs'] = json_encode($requestArgs);
 
     // Build the DB request
     $dbArgs = array();
@@ -134,6 +133,7 @@ function _textmsg_post ($dbLink, $apiUserToken, $requestArgs) {
             $logData['logStatusCode'] = $returnValue['httpResponse'];
             $logData['logStatusMessage'] = $returnValue['httpReason'];
             writeEntryToLog ($dbLink, $logData);
+            profileLogClose($profileData, __FILE__, $requestArgs, PROFILE_ERROR_NOTFOUND);
             return $returnValue;
         } else {
             if ($returnValue['count'] == 1) {
@@ -148,6 +148,7 @@ function _textmsg_post ($dbLink, $apiUserToken, $requestArgs) {
                 $logData['logStatusCode'] = $returnValue['httpResponse'];
                 $logData['logStatusMessage'] = $returnValue['httpReason'];
                 writeEntryToLog ($dbLink, $logData);
+                profileLogClose($profileData, __FILE__, $requestArgs,PROFILE_ERROR_NOTFOUND);
                 return $returnValue;
             }
         }
@@ -175,6 +176,7 @@ function _textmsg_post ($dbLink, $apiUserToken, $requestArgs) {
             $logData['logStatusCode'] = $returnValue['httpResponse'];
             $logData['logStatusMessage'] = $returnValue['httpReason'];
             writeEntryToLog ($dbLink, $logData);
+            profileLogClose($profileData, __FILE__, $requestArgs, PROFILE_ERROR_PARAMS);
             return $returnValue;
         } else {
             $dbArgs['sendDateTime'] = $now->format('Y-m-d H:i:s');
@@ -187,15 +189,22 @@ function _textmsg_post ($dbLink, $apiUserToken, $requestArgs) {
     // set the send service
     if (empty($requestArgs['sendService'])) {
         $dbArgs['sendService'] = DEFAULT_SEND_SERVICE;
+    } else {
+        $dbArgs['sendService'] = $requestArgs['sendService'];
     }
 
     if (empty($requestArgs['maxSendAttempts'])) {
         $dbArgs['maxSendAttempts'] = DEFAULT_TEXTMSG_MAX_SEND_ATTEMPTS;
+    } else {
+        $dbArgs['maxSendAttempts'] = $requestArgs['maxSendAttempts'];
     }
 
     if (empty($requestArgs['retryInterval'])) {
         $dbArgs['retryInterval'] = DEFAULT_RETRY_INTERVAL;
+    } else {
+        $dbArgs['retryInterval'] = $requestArgs['retryInterval'];
     }
+
 
     $now = new DateTime();
     $dbArgs['createdDate'] = $now->format('Y-m-d H:i:s');
@@ -235,33 +244,27 @@ function _textmsg_post ($dbLink, $apiUserToken, $requestArgs) {
 	} else {
 	    // successful creation
 		profileLogCheckpoint($profileData,'POST_RETURNED');
-		$returnValue['data'] = $dbArgs;
-		$returnValue['count'] = 1;
-		$returnValue['httpResponse'] = 201;
-		$returnValue['httpReason']	= "New text message created.";
-		
-		// update the user record to show the new login.
-		$recallQueryString = "SELECT * FROM `". DB_TABLE_TEXTMSG. "` ".
+
+		// Get the newly added textmsg record
+        $recallQueryString = "SELECT * FROM `". DB_TABLE_TEXTMSG. "` ".
     		"WHERE `textmsgGUID` = '".$dbArgs['textmsgGUID']."';";
         $dbInfo['recallQueryString'] = $recallQueryString;
 
-		// try to update the record to the database
-		$qResult = @mysqli_query($dbLink, $recallQueryString);
-		if (!$qResult) {
-			// SQL ERROR
-			$dbInfo['sqlError'] = @mysqli_error($dbLink);
-			// format response
-			$returnValue['contentType'] = CONTENT_TYPE_JSON;
-			if (API_DEBUG_MODE) {
-				$returnValue['debug'] = $dbInfo;
-			}
-			if (!empty($dbInfo['sqlError'])) {
-				$returnValue['httpReason']	.= " Unable to retrieve created textmsg entry. ".$dbInfo['sqlError'];
-			} else {
-				$returnValue['httpReason']	.= " Unable to retrieve created textmsg entry.";
-			}
-		}
-		
+        $getReturnValue = getDbRecords($dbLink, $recallQueryString);
+
+        if ($getReturnValue['count'] >= 1) {
+            $returnValue = $getReturnValue;
+            // set status to reflect a successful addition
+            $returnValue['httpResponse'] = 201;
+            $returnValue['httpReason']	= "New text message created.";
+        } else {
+            // Could not recall the new record so this is broken
+            $returnValue['data'] = '';
+            $returnValue['count'] = 0;
+            $returnValue['httpResponse'] = 500;
+            $returnValue['httpReason'] = 'Unable to read updated record from database.';
+        }
+
 		@mysqli_free_result($qResult);
 	}
 

@@ -78,6 +78,7 @@ function _session_delete ($dbLink, $apiUserToken, $requestArgs) {
         $logData['logStatusCode'] = $returnValue['httpResponse'];
         $logData['logStatusMessage'] = $returnValue['httpReason'];
         writeEntryToLog ($dbLink, $logData);
+        profileLogClose($profileData, __FILE__, $requestArgs, PROFILE_ERROR_NOTFOUND);
         return $returnValue;
 	} else {
 		$logData['logBeforeData'] = json_encode($testReturnValue['data']);
@@ -92,6 +93,7 @@ function _session_delete ($dbLink, $apiUserToken, $requestArgs) {
         $logData['logStatusCode'] = $returnValue['httpResponse'];
         $logData['logStatusMessage'] = $returnValue['httpReason'];
         writeEntryToLog ($dbLink, $logData);
+        profileLogClose($profileData, __FILE__, $requestArgs, PROFILE_ERROR_DELETED);
         return $returnValue;
 	}
 	

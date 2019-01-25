@@ -97,6 +97,7 @@ function _session_patch ($dbLink, $apiUserToken, $requestArgs) {
         $logData['logStatusCode'] = $returnValue['httpResponse'];
         $logData['logStatusMessage'] = $returnValue['httpReason'];
         writeEntryToLog ($dbLink, $logData);
+        profileLogClose($profileData, __FILE__, $requestArgs, PROFILE_ERROR_PARAMS);
 		return $returnValue;
 	}
 
@@ -126,6 +127,7 @@ function _session_patch ($dbLink, $apiUserToken, $requestArgs) {
         $logData['logStatusCode'] = $returnValue['httpResponse'];
         $logData['logStatusMessage'] = $returnValue['httpReason'];
         writeEntryToLog ($dbLink, $logData);
+        profileLogClose($profileData, __FILE__, $requestArgs, PROFILE_ERROR_NOTFOUND);
 		return $returnValue;
 	} else {
 		if ($returnValue['count'] == 1) {
@@ -140,6 +142,7 @@ function _session_patch ($dbLink, $apiUserToken, $requestArgs) {
             $logData['logStatusCode'] = $returnValue['httpResponse'];
             $logData['logStatusMessage'] = $returnValue['httpReason'];
             writeEntryToLog ($dbLink, $logData);
+            profileLogClose($profileData, __FILE__, $requestArgs, PROFILE_ERROR_KEY);
 			return $returnValue;
 		}
 	}
@@ -176,6 +179,7 @@ function _session_patch ($dbLink, $apiUserToken, $requestArgs) {
         $logData['logStatusCode'] = $returnValue['httpResponse'];
         $logData['logStatusMessage'] = $returnValue['httpReason'];
         writeEntryToLog ($dbLink, $logData);
+        profileLogClose($profileData, __FILE__, $requestArgs, PROFILE_ERROR_PARAMS);
         return $returnValue;
     }
 
@@ -188,13 +192,13 @@ function _session_patch ($dbLink, $apiUserToken, $requestArgs) {
 	// save a copy for the debugging output
 	$dbInfo['dbArgs'] = $dbArgs;
     $updateColumns = 0;
-    $insertQueryString = format_object_for_SQL_update (DB_TABLE_SESSION, $dbArgs, 'token', $updateColumns);
-	$dbInfo['insertQueryString'] = $insertQueryString;
+    $updateQueryString = format_object_for_SQL_update (DB_TABLE_SESSION, $dbArgs, 'token', $updateColumns);
+	$dbInfo['updateQueryString'] = $updateQueryString;
 
 	// try to update the session in the database
     $sessionInfo = array();
 	
-	$qResult = @mysqli_query($dbLink, $insertQueryString);
+	$qResult = @mysqli_query($dbLink, $updateQueryString);
 	if (!$qResult) {
 		// SQL ERROR
 		$dbInfo['sqlError'] = @mysqli_error($dbLink);
@@ -218,7 +222,7 @@ function _session_patch ($dbLink, $apiUserToken, $requestArgs) {
 		// get the new session data to return
         // create query string for get operation
         $getQueryString = 'SELECT * FROM `'. DB_TABLE_SESSION . '` WHERE `token` = \''. $apiUserToken . '\';';
-        $dbInfo ['queryString'] = $getQueryString;
+        $dbInfo ['getQueryString'] = $getQueryString;
         // get the session record that matches--there should be only one
         $getReturnValue = getDbRecords($dbLink, $getQueryString);
 
@@ -240,6 +244,7 @@ function _session_patch ($dbLink, $apiUserToken, $requestArgs) {
             $sessionInfo['httpResponse'] = 404;
             $sessionInfo['httpReason'] = 'Session not found.';
         }
+        $returnValue = $sessionInfo;
         @mysqli_free_result($qResult);
 	}
 
